@@ -29,6 +29,8 @@ set(GENCODE_SM70
   -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_70,code=compute_70)
 set(GENCODE_SM71
   -gencode=arch=compute_71,code=sm_71 -gencode=arch=compute_71,code=compute_71)
+set(GENCODE_SM75
+  -gencode=arch=compute_75,code=sm_75 -gencode=arch=compute_75,code=compute_75)
 
 option(SLABALLOC_GENCODE_SM30 "GENCODE_SM30" OFF)
 option(SLABALLOC_GENCODE_SM35 "GENCODE_SM35" OFF)
@@ -36,8 +38,9 @@ option(SLABALLOC_GENCODE_SM37 "GENCODE_SM37" OFF)
 option(SLABALLOC_GENCODE_SM50 "GENCODE_SM50" OFF)
 option(SLABALLOC_GENCODE_SM60 "GENCODE_SM60" OFF)
 option(SLABALLOC_GENCODE_SM61 "GENCODE_SM61" OFF)
-option(SLABALLOC_GENCODE_SM70 "GENCODE_SM70" ON)
+option(SLABALLOC_GENCODE_SM70 "GENCODE_SM70" OFF)
 option(SLABALLOC_GENCODE_SM71 "GENCODE_SM71" OFF)
+option(SLABALLOC_GENCODE_SM75 "GENCODE_SM75" ON)
 
 if (SLABALLOC_GENCODE_SM30)
   set(GENCODE ${GENCODE_ALLOC} ${GENCODE_SM30})
@@ -70,6 +73,10 @@ endif(SLABALLOC_GENCODE_SM70)
 if(SLABHASH_GENCODE_SM71)
   set(GENCODE ${GENCODE} ${GENCODE_SM71})
 endif(SLABHASH_GENCODE_SM71)
+
+if(SLABHASH_GENCODE_SM75)
+  set(GENCODE ${GENCODE} ${GENCODE_SM75})
+endif(SLABHASH_GENCODE_SM75)
 
 include_directories(src)
 add_subdirectory(test)
