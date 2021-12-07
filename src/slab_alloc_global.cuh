@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 #pragma once
-#include <random>
 #include <iostream>
+#include <random>
 #include <stdio.h>
 
-#define CHECK_ERROR(call)                                     \
-  do {                                                        \
-    cudaError_t err = call;                                   \
-    if (err != cudaSuccess) {                                 \
-      printf("CUDA error at %s %d: %s\n", __FILE__, __LINE__, \
-             cudaGetErrorString(err));                        \
-      exit(EXIT_FAILURE);                                     \
-    }                                                         \
+#define CHECK_ERROR(call)                                                      \
+  do {                                                                         \
+    cudaError_t err = call;                                                    \
+    if (err != cudaSuccess) {                                                  \
+      printf("CUDA error at %s %d: %s\n", __FILE__, __LINE__,                  \
+             cudaGetErrorString(err));                                         \
+      exit(EXIT_FAILURE);                                                      \
+    }                                                                          \
   } while (0)
 
 using SlabAllocAddressT = uint32_t;
