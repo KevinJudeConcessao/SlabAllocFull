@@ -17,8 +17,13 @@
 #include <iostream>
 #include <iterator>
 #include <random>
+
+#include <queue>
+#include <stack>
+
 #include <stdio.h>
 #include <thrust/pair.h>
+#include <type_traits>
 
 #define CHECK_ERROR(call)                                                      \
   do {                                                                         \
@@ -49,13 +54,13 @@ public:
   __device__ __host__ constexpr Iterator end() { return this->second; }
 
   __device__ __host__ operator bool() const {
-    return this->first == this->second;
+    return this->first != this->second;
   }
 };
 
 template <typename T>
 __device__ __host__ bool operator==(const IteratorRange<T> &First,
-                                    const Iterator<T> &Second) {
+                                    const IteratorRange<T> &Second) {
   return (First.begin() == Second.begin()) && (First.end() == Second.end());
 }
 
@@ -70,4 +75,34 @@ __device__ __host__ IteratorRange<Iterator>
 make_iterator_range(Iterator &&First, Iterator &&Last) {
   return IteratorRange<Iterator>(std::forward<Iterator>(First),
                                  std::forward<Iterator>(Second));
+}
+
+template <bool FIFO = true> class Executor {
+private:
+  using Function = std::function<void(void)>;
+  using ExecutorContainer = std::deque<Function>;
+
+public:
+  Executor() = default;
+
+  template <typename CallableTy, typename... Args>
+  void AddTask(CallableTy &&TheCallable, Args &&...Arguments) {
+    Commands.emplace_back(std::bind(std::forward<CallableTy>(TheCallable),
+                                    std::forward<Args>(Arguments)...));
+  }
+
+  void ExecuteTasks() {
+    while (!Commands.empty()) {
+      if (FIFO) {
+        Commands.front()();
+        Commands.pop_front();
+      } else {
+        Commands.back()();
+        Commands.pop_back();
+      }
+    }
+  }
+
+private:
+  ExecutorContainer<Function> Commands;
 }
