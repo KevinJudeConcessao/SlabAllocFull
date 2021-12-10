@@ -17,7 +17,10 @@
 #pragma once
 #include "slab_alloc_global.cuh"
 #include <iostream>
-#include <stdint.h>
+#include <cstdint>
+#include <functional>
+#include <algorithm>
+#include <random>
 
 /*
  * This class does not own any memory, and will be shallowly copied into device
@@ -64,7 +67,7 @@ public:
     super_block_index_ = 0;
     allocated_index_ = 0;
     return *this;
-  }
+}
 
   __device__ __host__ ~SlabAllocLightContext() {}
 
@@ -389,4 +392,163 @@ public:
   getContextPtr() {
     return &slab_alloc_context_;
   }
+};
+
+template<uint32_t, uint32_t, uint32_t>
+class SlabAlloc;
+
+template<uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN, uint32_t WordsPerMemUnit = 1>
+class SlabAllocContext {
+public:
+  static constexpr uint32_t MemoryUnitsPerMemoryBlock     = 1024;
+  static constexpr uint32_t WarpSize                      = 32;
+  static constexpr uint32_t BitMapSize                    = 32; 
+  static constexpr uint32_t BitMapsPerMemoryBlock         = 32;
+  static constexpr uint32_t NumberOfSuperBlocks           = SuperBlocksN;
+  static constexpr uint32_t WordsPerMemoryUnit            = WordsPerMemUnit;
+  static constexpr uint32_t MemoryBlocksPerSuperBlock     = (1 << MemoryBlocksLogN);
+
+  using MemoryUnit        = uint32_t[WarpSize][WordsPerMemoryUnit];
+  using MemoryBlock       = MemoryUnit[MemoryUnitsPerMemoryBlock];
+  using MemoryBlockBitMap = uint32_t[WarpSize];
+  using BitMap            = MemoryBlockBitMap[MemoryBlocksPerSuperBlock];
+  using MemoryBlocks      = MemoryBlock[MemoryBlocksPerSuperBlock];
+
+  struct SuperBlock {
+    BitMap TheBitMap;
+    MemoryBlocks TheMemoryBlocks;
+  };
+
+  __device__ __host__ SlabAllocContext() =
+      default; /* Initialize the member variables */
+
+  __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC) = default;
+
+  __device__ __host__ ~SlabAllocContext() = default;
+
+private:
+
+  /* Some Helper Functions */
+  
+  /* Structure of SlabAllocAddressT:
+   *
+   * │ 31           22 │ 21             8 │ 7             0 │
+   * ┌─────────────────┬──────────────────┬─────────────────┐ 
+   * │ SuperBlockIndex │ MemoryBlockIndex │ MemoryUnitIndex │ 
+   * ├─────────────────┼──────────────────┼─────────────────┤ 
+   * │ 10 bits         │ 14 bits          │ 8 bits          │ 
+   * └─────────────────┴──────────────────┴─────────────────┘ 
+   */
+
+  static constexpr uint32_t MemoryUnitIndexMask     = 0x000000FFu;
+  static constexpr uint32_t MemoryBlockIndexMask    = 0x001FFF00u;
+  static constexpr uint32_t SuperBlockIndexMask     = 0xFFE00000u; 
+
+  static constexpr uint32_t MemoryBlockIndexOffset  = 8;
+  static constexpr uint32_t SuperBlockIndexOffset   = 22;
+
+public:
+  __device__ __host__ __forceinline__ uint32_t
+  GetSuperBlockIndex(SlabAllocAddressT Address) const {
+    return Address >> SuperBlockIndexOffset;
+  }
+
+  __device__ __host__ __forceinline__ uint32_t
+  GetMemBlockIndex(SlabAllocAddressT Address) const {
+    return (Address & MemoryBlockIndexMask) >> MemoryBlockIndexOffset;
+  }
+
+  __device__ __host__ __forceinline__ SlabAllocAddressT
+  GetMemBlockAddress(SlabAllocAddressT Address) const {}
+
+  __device__ __host__ __forceinline__ uint32_t
+  GetMemUnitIndex(SlabAllocAddressT Address) const {
+    return Address & MemoryUnitIndexMask;
+  }
+
+  __device__ __forceinline__ void createMemBlockIndex(uint32_t GlobalWarpID) {}
+
+  __device__ __forceinline__ void updateMemBlockIndex(uint32_t GlobalWarpID) {}
+
+  __device__ __forceinline__ uint32_t warpAllocate(const uint32_t &LaneID) {}
+
+  __device__ __forceinline__ uint32_t warpAllocateBulk(const uint32_t &LaneID, const uint32_t N) {}
+
+  __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {}
+
+  __device__ __host__ __forceinline__ void
+  printAddress(SlabAllocAddressT Addr) {
+    printf("Super Block Index: %d, "
+           "Memory Block Index: %d, "
+           "Memory Unit Index: %d"
+           "\n",
+           GetSuperBlockIndex(Addr), GetMemBlockIndex(Addr), GetMemUnitIndex(Addr));
+  }
+
+  __device__ __forceinline__ void debug() {
+    printf("[SlabAllocContext] Thread: %d, Hash Coefficient: %u, Number of "
+           "Attempts: %u, Resident Index: %u, Resident BitMap: %x, SuperBlock "
+           "Index: %u\n",
+           threadIdx.x, HashCoefficient, NumberOfAttempts, ResidentIndex,
+           ResidentBitMap, SuperBlockIndex);
+  }
+
+private:
+  friend SlabAlloc<SuperBlocksN, MemoryBlocksLogN, WordsPerMemoryUnit>;
+  SuperBlock *SuperBlocks[SuperBlocksN];
+
+  uint32_t HashCoefficient;
+  uint32_t NumberOfAttempts;
+  uint32_t ResidentIndex;
+  uint32_t ResidentBitMap;
+  uint32_t SuperBlockIndex;
+};
+
+template <uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN,
+          uint32_t WordsPerMemoryUnit = 1>
+class SlabAlloc {
+public:
+  using AllocContext =
+      SlabAllocContext<SuperBlocksN, MemoryBlocksLogN, WordsPerMemoryUnit>;
+  using SuperBlockTy = typename AllocContext::SuperBlock
+
+  SlabAlloc()
+      : CleanupCommands{},
+        TheSlabAllocContext{} {
+    std::mt19937 RandomNumberGenerator{std::time(0)};
+    uint32_t HashCoefficient = RandomNumberGenerator();
+    Executor<true> BlockSetup;
+
+    for (int Counter = 0; Counter < SuperBlocksN; ++i) {
+      CHECK_ERROR(cudaMalloc(static_cast<void **>(
+          &TheSlabAllocContext.SuperBlocks[Counter], sizeof(SuperBlock))));
+
+      BlockSetup.AddTask(
+          [](SuperBlock *TheSuperBlock) -> void {
+            CHECK_ERROR(cudaMemset(TheSuperBlock->BitMap, 0x00,
+                                   sizeof(typename AllocContext::BitMap)));
+            CHECK_ERROR(
+                cudaMemset(TheSuperBlock->TheMemoryBlocks, 0xFF,
+                           sizeof(typename AllocContext::MemoryBlocks)));
+          },
+          TheSlabAllocContext.SuperBlocks[Counter]);
+
+      CleanupCommands.AddTask(
+          [](SuperBlock *TheSuperBlock) -> void {
+            CHECK_ERROR(cudaFree(TheSuperBlock));
+          },
+          TheSlabAllocContext.SuperBlocks[Counter]);
+    }
+
+    BlockSetup.ExecuteTasks();
+    TheSlabAllocContext.HashCoefficient = HashCoefficient;
+  }
+
+  ~SlabAlloc() { CleanupCommands.ExecuteTasks(); };
+
+  AllocContext *getContextPtr() { return &TheSlabAllocContext; }
+
+private:
+  Executor<false> CleanupCommands;
+  AllocContext TheSlabAllocContext;
 };
