@@ -69,7 +69,7 @@ public:
     return *this;
 }
 
-  __device__ __host__ ~SlabAllocLightContext() {}
+  __device__ __host__ ~SlabAllocLightContext() = default;
 
   __device__ __host__ void initParameters(uint32_t *d_super_block,
                                           uint32_t hash_coef) {
@@ -397,7 +397,8 @@ public:
 template<uint32_t, uint32_t, uint32_t>
 class SlabAlloc;
 
-template<uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN, uint32_t WordsPerMemUnit = 1>
+template <uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN,
+          uint32_t WordsPerMemUnit = 1>
 class SlabAllocContext {
 public:
   static constexpr uint32_t MemoryUnitsPerMemoryBlock     = 1024;
@@ -419,10 +420,23 @@ public:
     MemoryBlocks TheMemoryBlocks;
   };
 
-  __device__ __host__ SlabAllocContext() =
-      default; /* Initialize the member variables */
+  __device__ __host__ SlabAllocContext() = default;
 
-  __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC) = default;
+  __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
+      : HashCoefficient(SAC.HashCoefficient), NumberOfAttempts{0},
+        ResidentIndex{0}, ResidentBitMap{0}, SuperBlockIndex{0}, 
+        SuperBlocks{nullptr};
+
+  SlabAllocContext& operator=(const SlabAllocContext &SAC) {
+    HashCoefficient  = SAC.HashCoefficient;
+    NumberOfAttempts = 0;
+    ResidentIndex    = 0;
+    SuperBlockIndex  = 0;
+
+    std::copy(SAC.SuperBlocks, SAC.SuperBlocks + SuperBlocksN, SuperBlocks);
+
+    return *this;
+  }
 
   __device__ __host__ ~SlabAllocContext() = default;
 
@@ -432,20 +446,22 @@ private:
   
   /* Structure of SlabAllocAddressT:
    *
-   * │ 31           22 │ 21             8 │ 7             0 │
+   * │ 31           24 │ 23            10 │ 9             0 │
    * ┌─────────────────┬──────────────────┬─────────────────┐ 
    * │ SuperBlockIndex │ MemoryBlockIndex │ MemoryUnitIndex │ 
    * ├─────────────────┼──────────────────┼─────────────────┤ 
-   * │ 10 bits         │ 14 bits          │ 8 bits          │ 
+   * │ 8 bits          │ 14 bits          │ 10 bits         │ 
    * └─────────────────┴──────────────────┴─────────────────┘ 
    */
+
+  /* TODO: Masks are incorrect. To correct them */ 
 
   static constexpr uint32_t MemoryUnitIndexMask     = 0x000000FFu;
   static constexpr uint32_t MemoryBlockIndexMask    = 0x001FFF00u;
   static constexpr uint32_t SuperBlockIndexMask     = 0xFFE00000u; 
 
-  static constexpr uint32_t MemoryBlockIndexOffset  = 8;
-  static constexpr uint32_t SuperBlockIndexOffset   = 22;
+  static constexpr uint32_t MemoryBlockIndexOffset  = 9;
+  static constexpr uint32_t SuperBlockIndexOffset   = 23;
 
 public:
   __device__ __host__ __forceinline__ uint32_t
@@ -466,15 +482,99 @@ public:
     return Address & MemoryUnitIndexMask;
   }
 
-  __device__ __forceinline__ void createMemBlockIndex(uint32_t GlobalWarpID) {}
+  __device__ __forceinline__ uint32_t *
+  getPointerFromSlab(const SlabAllocAddressT &Next, const uint32_t &LaneID) {
+    /* not implemented */
+    return nullptr;
+  }
 
-  __device__ __forceinline__ void updateMemBlockIndex(uint32_t GlobalWarpID) {}
+  __device__ __forceinline__ uint32_t *
+  getPointerForBitmap(const uint32_t SuperBlockIndex,
+                      const uint32_t BitMapIndex) {
+    /* not implemented */
+    return nullptr;
+  }
 
-  __device__ __forceinline__ uint32_t warpAllocate(const uint32_t &LaneID) {}
+  __device__ __forceinline__ void createMemBlockIndex(uint32_t GlobalWarpID) {
+    SuperBlockIndex = GlobalWarpID % NumberOfSuperBlocks;
+    ResidentIndex = (HashCoefficient * GlobalWarpID) >> (32 - MemoryBlocksLogN);
+  }
 
-  __device__ __forceinline__ uint32_t warpAllocateBulk(const uint32_t &LaneID, const uint32_t N) {}
+  __device__ __forceinline__ void updateMemBlockIndex(uint32_t GlobalWarpID) {
+    uint32_t LaneID = threadIdx.x & 0x1F;
 
-  __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {}
+    ++ NumberOfAttempts;
+    ++ SuperBlockIndex;
+
+    SuperBlockIndex = (SuperBlockIndex == NumberOfSuperBlocks) ? 0 : SuperBlockIndex;
+    ResidentIndex = (HashCoefficient * (NumberOfAttempts + GlobalWarpID)) >> (32 - MemoryBlocksLogN); 
+
+    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
+    ResidentBitMap = MBBRef[LaneID];
+  }
+
+  __device__ __forceinline__ void initAllocator(uint32_t &ThreadID,
+                                                uint32_t &LaneID) {
+    uint32_t GlobalWarpID = (ThreadID >> 5);
+    createMemBlockIndex(GlobalWarpID);
+    
+    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
+    ResidentBitMap = MBBRef[LaneID];
+  }
+
+  __device__ __forceinline__ uint32_t warpAllocate(const uint32_t &LaneID) {
+    uint32_t AllocatedResult = 0xFFFFFFFF;
+    int32_t  EmptyLane = -1;
+    uint32_t FreeLane;
+    uint32_t ReadBitMap = ResidentBitMap;
+    uint32_t GlobalWarpID = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
+
+    while (AllocatedResult == 0xFFFFFFFF) {
+      /* Check whether there exists an empty memory unit associated with thread */
+      EmptyLane = __ffs(~ResidentBitMap) - 1;  
+
+      /* Check if threads in warp have empty memory units */
+      FreeLane = __ballot_sync(0xFFFFFFFF, EmptyLane >= 0);
+
+      if (FreeLane == 0) {
+        updateMemBlockIndex(GlobalWarpID);
+        ReadBitMap = ResidentBitMap;
+      } else {
+        uint32_t SourceLane = __ffs(FreeLane) - 1;
+        SuperBlock *SPtr = SuperBlocks[SuperBlockIndex];
+        MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
+        
+        ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap, ResidentBitMap | (1 << EmptyLane));
+        if (ReadBitMap == ResidentBitMap) {
+          ResidentBitMap  = ResidentBitMap | (1 << EmptyLane);
+          AllocatedResult = (SuperBlockIndex << SuperBlockIndexOffset) | (ResidentIndex << MemoryBlockIndexOffset) | (LaneID /* TODO: Need clarification */ ) | EmptyLane;
+        } else {
+          ResidentBitMap = ReadBitMap
+        }
+      }
+
+      AllocatedResult = __shfl_sync(0xFFFFFFFF, AllocatedResult, SourceLane);
+    }
+
+    return AllocatedResult;
+  }
+
+  __device__ __forceinline__ uint32_t warpAllocateBulk(const uint32_t &LaneID,
+                                                       const uint32_t N) {}
+
+  __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {
+    uint32_t SuperBlockIndex  = GetSuperBlockIndex(Ptr);
+    uint32_t MemoryBlockIndex = GetMemBlockIndex(Ptr);
+    uint32_t MemoryUnitIndex  = GetMemUnitIndex(Ptr);
+
+    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    BitMap &BitMapRef = TheSuperBlock->TheBitMap;
+    MemoryBlockBitMap &MBBMRef = BitMapRef[MemoryBlockIndex];
+
+    atomicAnd(&MBBMRef[MemoryUnitIndex], ~((1 << MemoryUnitIndex) & 0x1F));
+  }
 
   __device__ __host__ __forceinline__ void
   printAddress(SlabAllocAddressT Addr) {
@@ -494,14 +594,15 @@ public:
   }
 
 private:
-  friend SlabAlloc<SuperBlocksN, MemoryBlocksLogN, WordsPerMemoryUnit>;
-  SuperBlock *SuperBlocks[SuperBlocksN];
+  friend SlabAlloc<SuperBlocksN, MemoryBlocksLogN, WordsPerMemoryUnit>;  
 
   uint32_t HashCoefficient;
   uint32_t NumberOfAttempts;
   uint32_t ResidentIndex;
   uint32_t ResidentBitMap;
   uint32_t SuperBlockIndex;
+  
+  SuperBlock *SuperBlocks[SuperBlocksN];
 };
 
 template <uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN,
