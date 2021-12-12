@@ -10,3 +10,6 @@ This library is a rafactored and slightly redesigned version of the original cod
 
 ### Current limitations and future developments:
 It currently includes the light-version, where total amount allocated memory is upper-bounded to fit in a single contiguous memory array (<4GB). The more general approach is discussed in the paper, but has not yet been added to this repo.
+
+### Changelog:
+- [2021-12-12] This version also includes the full version described in the paper and removes the 4GB allocation upper bound. The API is stable, but the implementation is very alpha quality.
