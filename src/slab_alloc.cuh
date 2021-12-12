@@ -503,11 +503,13 @@ public:
   __device__ __forceinline__ void updateMemBlockIndex(uint32_t GlobalWarpID) {
     uint32_t LaneID = threadIdx.x & 0x1F;
 
-    ++ NumberOfAttempts;
-    ++ SuperBlockIndex;
+    ++NumberOfAttempts;
+    ++SuperBlockIndex;
 
-    SuperBlockIndex = (SuperBlockIndex == NumberOfSuperBlocks) ? 0 : SuperBlockIndex;
-    ResidentIndex = (HashCoefficient * (NumberOfAttempts + GlobalWarpID)) >> (32 - MemoryBlocksLogN); 
+    SuperBlockIndex =
+        (SuperBlockIndex == NumberOfSuperBlocks) ? 0 : SuperBlockIndex;
+    ResidentIndex = (HashCoefficient * (NumberOfAttempts + GlobalWarpID)) >>
+                    (32 - MemoryBlocksLogN);
 
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
     MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
@@ -518,7 +520,7 @@ public:
                                                 uint32_t &LaneID) {
     uint32_t GlobalWarpID = (ThreadID >> 5);
     createMemBlockIndex(GlobalWarpID);
-    
+
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
     MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
     ResidentBitMap = MBBRef[LaneID];
@@ -526,14 +528,15 @@ public:
 
   __device__ __forceinline__ uint32_t warpAllocate(const uint32_t &LaneID) {
     uint32_t AllocatedResult = 0xFFFFFFFF;
-    int32_t  EmptyLane = -1;
+    int32_t EmptyLane = -1;
     uint32_t FreeLane;
     uint32_t ReadBitMap = ResidentBitMap;
     uint32_t GlobalWarpID = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
 
     while (AllocatedResult == 0xFFFFFFFF) {
-      /* Check whether there exists an empty memory unit associated with thread */
-      EmptyLane = __ffs(~ResidentBitMap) - 1;  
+      /* Check whether there exists an empty memory unit associated with thread
+       */
+      EmptyLane = __ffs(~ResidentBitMap) - 1;
 
       /* Check if threads in warp have empty memory units */
       FreeLane = __ballot_sync(0xFFFFFFFF, EmptyLane >= 0);
@@ -545,11 +548,14 @@ public:
         uint32_t SourceLane = __ffs(FreeLane) - 1;
         SuperBlock *SPtr = SuperBlocks[SuperBlockIndex];
         MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
-        
-        ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap, ResidentBitMap | (1 << EmptyLane));
+
+        ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap,
+                               ResidentBitMap | (1 << EmptyLane));
         if (ReadBitMap == ResidentBitMap) {
-          ResidentBitMap  = ResidentBitMap | (1 << EmptyLane);
-          AllocatedResult = (SuperBlockIndex << SuperBlockIndexOffset) | (ResidentIndex << MemoryBlockIndexOffset) | (LaneID /* TODO: Need clarification */ ) | EmptyLane;
+          ResidentBitMap = ResidentBitMap | (1 << EmptyLane);
+          AllocatedResult = (SuperBlockIndex << SuperBlockIndexOffset) |
+                            (ResidentIndex << MemoryBlockIndexOffset) |
+                            (LaneID /* TODO: Need clarification */) | EmptyLane;
         } else {
           ResidentBitMap = ReadBitMap
         }
