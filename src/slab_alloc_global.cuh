@@ -17,6 +17,7 @@
 #include <iostream>
 #include <iterator>
 #include <random>
+#include <functional>
 
 #include <queue>
 #include <stack>
@@ -36,46 +37,6 @@
   } while (0)
 
 using SlabAllocAddressT = uint32_t;
-
-template <typename Iterator>
-class IteratorRange : public thrust::pair<Iterator, Iterator> {
-public:
-  template <typename Container>
-  __device__ __host__ IteratorRange(Container &&TheContainer)
-      : std::pair<Iterator, Iterator>(TheContainer.begin(),
-                                      TheContainer.end()) {}
-
-  __device__ __host__ IteratorRange(Iterator &&first, Iterator &last)
-      : std::pair<Iterator, Iterator>(std::forward<Iterator>(first),
-                                      std::end<Iterator>(end)) {}
-
-  __device__ __host__ constexpr Iterator begin() { return this->first; }
-
-  __device__ __host__ constexpr Iterator end() { return this->second; }
-
-  __device__ __host__ operator bool() const {
-    return this->first != this->second;
-  }
-};
-
-template <typename T>
-__device__ __host__ bool operator==(const IteratorRange<T> &First,
-                                    const IteratorRange<T> &Second) {
-  return (First.begin() == Second.begin()) && (First.end() == Second.end());
-}
-
-template <typename T>
-__device__ __host__ bool operator!=(const IteratorRange<T> &First,
-                                    const IteratorRange<T> &Second) {
-  return !(First == Second);
-}
-
-template <typename Iterator>
-__device__ __host__ IteratorRange<Iterator>
-make_iterator_range(Iterator &&First, Iterator &&Last) {
-  return IteratorRange<Iterator>(std::forward<Iterator>(First),
-                                 std::forward<Iterator>(Second));
-}
 
 template <bool FIFO = true> class Executor {
 private:
@@ -104,5 +65,5 @@ public:
   }
 
 private:
-  ExecutorContainer<Function> Commands;
-}
+  ExecutorContainer Commands;
+};
