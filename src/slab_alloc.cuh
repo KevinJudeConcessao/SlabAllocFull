@@ -16,10 +16,11 @@
 
 #pragma once
 #include "slab_alloc_global.cuh"
-#include <iostream>
-#include <cstdint>
-#include <functional>
 #include <algorithm>
+#include <cstdint>
+#include <ctime>
+#include <functional>
+#include <iostream>
 #include <random>
 
 /*
@@ -67,7 +68,7 @@ public:
     super_block_index_ = 0;
     allocated_index_ = 0;
     return *this;
-}
+  }
 
   __device__ __host__ ~SlabAllocLightContext() = default;
 
@@ -394,26 +395,25 @@ public:
   }
 };
 
-template<uint32_t, uint32_t, uint32_t>
-class SlabAlloc;
+template <uint32_t, uint32_t, uint32_t> class SlabAlloc;
 
-template <uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN,
+template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN,
           uint32_t WordsPerMemUnit = 1>
 class SlabAllocContext {
 public:
-  static constexpr uint32_t MemoryUnitsPerMemoryBlock     = 1024;
-  static constexpr uint32_t WarpSize                      = 32;
-  static constexpr uint32_t BitMapSize                    = 32; 
-  static constexpr uint32_t BitMapsPerMemoryBlock         = 32;
-  static constexpr uint32_t NumberOfSuperBlocks           = SuperBlocksN;
-  static constexpr uint32_t WordsPerMemoryUnit            = WordsPerMemUnit;
-  static constexpr uint32_t MemoryBlocksPerSuperBlock     = (1 << MemoryBlocksLogN);
+  static constexpr uint32_t MemoryUnitsPerMemoryBlock = 1024;
+  static constexpr uint32_t WarpSize = 32;
+  static constexpr uint32_t BitMapSize = 32;
+  static constexpr uint32_t BitMapsPerMemoryBlock = 32;
+  static constexpr uint32_t NumberOfSuperBlocks = SuperBlocksN;
+  static constexpr uint32_t WordsPerMemoryUnit = WordsPerMemUnit;
+  static constexpr uint32_t MemoryBlocksPerSuperBlock = (1 << MemoryBlocksLogN);
 
-  using MemoryUnit        = uint32_t[WarpSize][WordsPerMemoryUnit];
-  using MemoryBlock       = MemoryUnit[MemoryUnitsPerMemoryBlock];
+  using MemoryUnit = uint32_t[WarpSize][WordsPerMemoryUnit];
+  using MemoryBlock = MemoryUnit[MemoryUnitsPerMemoryBlock];
   using MemoryBlockBitMap = uint32_t[WarpSize];
-  using BitMap            = MemoryBlockBitMap[MemoryBlocksPerSuperBlock];
-  using MemoryBlocks      = MemoryBlock[MemoryBlocksPerSuperBlock];
+  using BitMap = MemoryBlockBitMap[MemoryBlocksPerSuperBlock];
+  using MemoryBlocks = MemoryBlock[MemoryBlocksPerSuperBlock];
 
   struct SuperBlock {
     BitMap TheBitMap;
@@ -424,14 +424,13 @@ public:
 
   __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
       : HashCoefficient(SAC.HashCoefficient), NumberOfAttempts{0},
-        ResidentIndex{0}, ResidentBitMap{0}, SuperBlockIndex{0}, 
-        SuperBlocks{nullptr};
+        ResidentIndex{0}, ResidentBitMap{0}, SuperBlockIndex{0} {}
 
-  SlabAllocContext& operator=(const SlabAllocContext &SAC) {
-    HashCoefficient  = SAC.HashCoefficient;
+  SlabAllocContext &operator=(const SlabAllocContext &SAC) {
+    HashCoefficient = SAC.HashCoefficient;
     NumberOfAttempts = 0;
-    ResidentIndex    = 0;
-    SuperBlockIndex  = 0;
+    ResidentIndex = 0;
+    SuperBlockIndex = 0;
 
     std::copy(SAC.SuperBlocks, SAC.SuperBlocks + SuperBlocksN, SuperBlocks);
 
@@ -441,27 +440,26 @@ public:
   __device__ __host__ ~SlabAllocContext() = default;
 
 private:
-
   /* Some Helper Functions */
-  
+
   /* Structure of SlabAllocAddressT:
    *
    * │ 31           24 │ 23            10 │ 9             0 │
-   * ┌─────────────────┬──────────────────┬─────────────────┐ 
-   * │ SuperBlockIndex │ MemoryBlockIndex │ MemoryUnitIndex │ 
-   * ├─────────────────┼──────────────────┼─────────────────┤ 
-   * │ 8 bits          │ 14 bits          │ 10 bits         │ 
-   * └─────────────────┴──────────────────┴─────────────────┘ 
+   * ┌─────────────────┬──────────────────┬─────────────────┐
+   * │ SuperBlockIndex │ MemoryBlockIndex │ MemoryUnitIndex │
+   * ├─────────────────┼──────────────────┼─────────────────┤
+   * │ 8 bits          │ 14 bits          │ 10 bits         │
+   * └─────────────────┴──────────────────┴─────────────────┘
    */
 
-  /* TODO: Masks are incorrect. To correct them */ 
+  /* TODO: Masks are incorrect. To correct them */
 
-  static constexpr uint32_t MemoryUnitIndexMask     = 0x000000FFu;
-  static constexpr uint32_t MemoryBlockIndexMask    = 0x001FFF00u;
-  static constexpr uint32_t SuperBlockIndexMask     = 0xFFE00000u; 
+  static constexpr uint32_t MemoryUnitIndexMask = 0x000000FFu;
+  static constexpr uint32_t MemoryBlockIndexMask = 0x001FFF00u;
+  static constexpr uint32_t SuperBlockIndexMask = 0xFFE00000u;
 
-  static constexpr uint32_t MemoryBlockIndexOffset  = 9;
-  static constexpr uint32_t SuperBlockIndexOffset   = 23;
+  static constexpr uint32_t MemoryBlockIndexOffset = 9;
+  static constexpr uint32_t SuperBlockIndexOffset = 23;
 
 public:
   __device__ __host__ __forceinline__ uint32_t
@@ -546,22 +544,24 @@ public:
         ReadBitMap = ResidentBitMap;
       } else {
         uint32_t SourceLane = __ffs(FreeLane) - 1;
-        SuperBlock *SPtr = SuperBlocks[SuperBlockIndex];
-        MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
+        if (SourceLane == LaneID) {
+          SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+          MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
 
-        ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap,
-                               ResidentBitMap | (1 << EmptyLane));
-        if (ReadBitMap == ResidentBitMap) {
-          ResidentBitMap = ResidentBitMap | (1 << EmptyLane);
-          AllocatedResult = (SuperBlockIndex << SuperBlockIndexOffset) |
-                            (ResidentIndex << MemoryBlockIndexOffset) |
-                            (LaneID /* TODO: Need clarification */) | EmptyLane;
-        } else {
-          ResidentBitMap = ReadBitMap
+          ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap,
+                                 ResidentBitMap | (1 << EmptyLane));
+          if (ReadBitMap == ResidentBitMap) {
+            ResidentBitMap = ResidentBitMap | (1 << EmptyLane);
+            AllocatedResult = (SuperBlockIndex << SuperBlockIndexOffset) |
+                              (ResidentIndex << MemoryBlockIndexOffset) |
+                              (LaneID /* TODO: Need clarification */) |
+                              EmptyLane;
+          } else {
+            ResidentBitMap = ReadBitMap;
+          }
         }
+        AllocatedResult = __shfl_sync(0xFFFFFFFF, AllocatedResult, SourceLane);
       }
-
-      AllocatedResult = __shfl_sync(0xFFFFFFFF, AllocatedResult, SourceLane);
     }
 
     return AllocatedResult;
@@ -571,12 +571,12 @@ public:
                                                        const uint32_t N) {}
 
   __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {
-    uint32_t SuperBlockIndex  = GetSuperBlockIndex(Ptr);
+    uint32_t SuperBlockIndex = GetSuperBlockIndex(Ptr);
     uint32_t MemoryBlockIndex = GetMemBlockIndex(Ptr);
-    uint32_t MemoryUnitIndex  = GetMemUnitIndex(Ptr);
+    uint32_t MemoryUnitIndex = GetMemUnitIndex(Ptr);
 
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
-    BitMap &BitMapRef = TheSuperBlock->TheBitMap;
+    BitMap &BitMapRef = SBPtr->TheBitMap;
     MemoryBlockBitMap &MBBMRef = BitMapRef[MemoryBlockIndex];
 
     atomicAnd(&MBBMRef[MemoryUnitIndex], ~((1 << MemoryUnitIndex) & 0x1F));
@@ -588,7 +588,8 @@ public:
            "Memory Block Index: %d, "
            "Memory Unit Index: %d"
            "\n",
-           GetSuperBlockIndex(Addr), GetMemBlockIndex(Addr), GetMemUnitIndex(Addr));
+           GetSuperBlockIndex(Addr), GetMemBlockIndex(Addr),
+           GetMemUnitIndex(Addr));
   }
 
   __device__ __forceinline__ void debug() {
@@ -600,39 +601,38 @@ public:
   }
 
 private:
-  friend SlabAlloc<SuperBlocksN, MemoryBlocksLogN, WordsPerMemoryUnit>;  
+  friend class SlabAlloc<MemoryBlocksLogN, SuperBlocksN, WordsPerMemoryUnit>;
 
   uint32_t HashCoefficient;
   uint32_t NumberOfAttempts;
   uint32_t ResidentIndex;
   uint32_t ResidentBitMap;
   uint32_t SuperBlockIndex;
-  
+
   SuperBlock *SuperBlocks[SuperBlocksN];
 };
 
-template <uint32_t SuperBlocksN, uint32_t MemoryBlocksLogN,
+template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN, 
           uint32_t WordsPerMemoryUnit = 1>
 class SlabAlloc {
 public:
   using AllocContext =
-      SlabAllocContext<SuperBlocksN, MemoryBlocksLogN, WordsPerMemoryUnit>;
-  using SuperBlockTy = typename AllocContext::SuperBlock
+      SlabAllocContext<MemoryBlocksLogN, SuperBlocksN, WordsPerMemoryUnit>;
+  using SuperBlockTy = typename AllocContext::SuperBlock;
 
-  SlabAlloc()
-      : CleanupCommands{},
-        TheSlabAllocContext{} {
-    std::mt19937 RandomNumberGenerator{std::time(0)};
+  SlabAlloc() : CleanupCommands{}, TheSlabAllocContext{} {
+    std::mt19937 RandomNumberGenerator{static_cast<unsigned long>(std::time(0))};
     uint32_t HashCoefficient = RandomNumberGenerator();
     Executor<true> BlockSetup;
 
-    for (int Counter = 0; Counter < SuperBlocksN; ++i) {
-      CHECK_ERROR(cudaMalloc(static_cast<void **>(
-          &TheSlabAllocContext.SuperBlocks[Counter], sizeof(SuperBlock))));
+    for (int Counter = 0; Counter < SuperBlocksN; ++Counter) {
+      CHECK_ERROR(cudaMalloc(
+          reinterpret_cast<void **>(&TheSlabAllocContext.SuperBlocks[Counter]),
+          sizeof(SuperBlockTy)));
 
       BlockSetup.AddTask(
-          [](SuperBlock *TheSuperBlock) -> void {
-            CHECK_ERROR(cudaMemset(TheSuperBlock->BitMap, 0x00,
+          [](SuperBlockTy *TheSuperBlock) -> void {
+            CHECK_ERROR(cudaMemset(TheSuperBlock->TheBitMap, 0x00,
                                    sizeof(typename AllocContext::BitMap)));
             CHECK_ERROR(
                 cudaMemset(TheSuperBlock->TheMemoryBlocks, 0xFF,
@@ -641,7 +641,7 @@ public:
           TheSlabAllocContext.SuperBlocks[Counter]);
 
       CleanupCommands.AddTask(
-          [](SuperBlock *TheSuperBlock) -> void {
+          [](SuperBlockTy *TheSuperBlock) -> void {
             CHECK_ERROR(cudaFree(TheSuperBlock));
           },
           TheSlabAllocContext.SuperBlocks[Counter]);
@@ -660,7 +660,8 @@ private:
   AllocContext TheSlabAllocContext;
 };
 
-template <uint32_t LogNumMemoryBlocks, uint32_t NumSuperBlocks, uint32_t NumReplicas = 1u>
+template <uint32_t LogNumMemoryBlocks, uint32_t NumSuperBlocks,
+          uint32_t NumReplicas = 1u>
 struct LightAllocatorPolicy {
   static constexpr uint32_t LogNumberOfMemoryBlocks = LogNumMemoryBlocks;
   static constexpr uint32_t NumberOfSuperBlocks = NumSuperBlocks;
@@ -672,13 +673,15 @@ struct LightAllocatorPolicy {
       SlabAllocLightContext<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
 };
 
-template <uint32_t LogNumMemoryBlocks, uint32_t NumSuperBlocks, uint32_t NumReplicas = 1u>
+template <uint32_t LogNumMemoryBlocks, uint32_t NumSuperBlocks,
+          uint32_t NumReplicas = 1u>
 struct FullAllocatorPolicy {
   static constexpr uint32_t LogNumberOfMemoryBlocks = LogNumMemoryBlocks;
   static constexpr uint32_t NumberOfSuperBlocks = NumSuperBlocks;
   static constexpr uint32_t NumberOfReplicas = NumReplicas;
 
-  using DynamicAllocatorT = SlabAlloc<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
+  using DynamicAllocatorT =
+      SlabAlloc<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
   using AllocatorContextT =
       SlabAllocLight<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
 };
