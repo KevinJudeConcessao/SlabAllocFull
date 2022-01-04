@@ -70,7 +70,7 @@ public:
     return *this;
   }
 
-  __device__ __host__ ~SlabAllocLightContext() = default;
+  __device__ __host__ ~SlabAllocLightContext() {};
 
   __device__ __host__ void initParameters(uint32_t *d_super_block,
                                           uint32_t hash_coef) {
@@ -420,7 +420,7 @@ public:
     MemoryBlocks TheMemoryBlocks;
   };
 
-  __device__ __host__ SlabAllocContext() = default;
+  __device__ __host__ SlabAllocContext() {};
 
   __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
       : HashCoefficient(SAC.HashCoefficient), NumberOfAttempts{0},
@@ -437,7 +437,7 @@ public:
     return *this;
   }
 
-  __device__ __host__ ~SlabAllocContext() = default;
+  __device__ __host__ ~SlabAllocContext() {};
 
 private:
   /* Some Helper Functions */
