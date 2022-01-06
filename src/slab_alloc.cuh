@@ -70,7 +70,7 @@ public:
     return *this;
   }
 
-  __device__ __host__ ~SlabAllocLightContext() {};
+  __device__ __host__ ~SlabAllocLightContext(){};
 
   __device__ __host__ void initParameters(uint32_t *d_super_block,
                                           uint32_t hash_coef) {
@@ -420,7 +420,7 @@ public:
     MemoryBlocks TheMemoryBlocks;
   };
 
-  __device__ __host__ SlabAllocContext() {};
+  __device__ __host__ SlabAllocContext(){};
 
   __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
       : HashCoefficient(SAC.HashCoefficient), NumberOfAttempts{0},
@@ -437,7 +437,7 @@ public:
     return *this;
   }
 
-  __device__ __host__ ~SlabAllocContext() {};
+  __device__ __host__ ~SlabAllocContext(){};
 
 private:
   /* Some Helper Functions */
@@ -609,10 +609,10 @@ private:
   uint32_t ResidentBitMap;
   uint32_t SuperBlockIndex;
 
-  SuperBlock *SuperBlocks[SuperBlocksN];
+  SuperBlock (*SuperBlocks)[SuperBlocksN];
 };
 
-template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN, 
+template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN,
           uint32_t WordsPerMemoryUnit = 1>
 class SlabAlloc {
 public:
@@ -621,34 +621,35 @@ public:
   using SuperBlockTy = typename AllocContext::SuperBlock;
 
   SlabAlloc() : CleanupCommands{}, TheSlabAllocContext{} {
-    std::mt19937 RandomNumberGenerator{static_cast<unsigned long>(std::time(0))};
+    std::mt19937 RandomNumberGenerator{
+        static_cast<unsigned long>(std::time(0))};
     uint32_t HashCoefficient = RandomNumberGenerator();
     Executor<true> BlockSetup;
 
-    for (int Counter = 0; Counter < SuperBlocksN; ++Counter) {
-      CHECK_ERROR(cudaMalloc(
-          reinterpret_cast<void **>(&TheSlabAllocContext.SuperBlocks[Counter]),
-          sizeof(SuperBlockTy)));
+    CHECK_ERROR(
+        cudaMalloc(reintepret_cast<void **>(&TheSlabAllocContext.SuperBlocks),
+                   sizeof(SuperBlockTy[SuperBlocksN])));
 
+    for (int Counter = 0; Counter < SuperBlocksN; ++Counter) {
       BlockSetup.AddTask(
           [](SuperBlockTy *TheSuperBlock) -> void {
-            CHECK_ERROR(cudaMemset(TheSuperBlock->TheBitMap, 0x00,
+            CHECK_ERROR(cudaMemset(&TheSuperBlock->TheBitMap, 0x00,
                                    sizeof(typename AllocContext::BitMap)));
             CHECK_ERROR(
-                cudaMemset(TheSuperBlock->TheMemoryBlocks, 0xFF,
+                cudaMemset(&TheSuperBlock->TheMemoryBlocks, 0xFF,
                            sizeof(typename AllocContext::MemoryBlocks)));
           },
-          TheSlabAllocContext.SuperBlocks[Counter]);
-
-      CleanupCommands.AddTask(
-          [](SuperBlockTy *TheSuperBlock) -> void {
-            CHECK_ERROR(cudaFree(TheSuperBlock));
-          },
-          TheSlabAllocContext.SuperBlocks[Counter]);
+          &TheSlabAllocContext.SuperBlocks[Counter]);
     }
 
     BlockSetup.ExecuteTasks();
     TheSlabAllocContext.HashCoefficient = HashCoefficient;
+
+    CleanupCommands.AddTask(
+        [](SuperBlockTy(*SuperBlocks)[SuperBlocksN]) -> void {
+          CHECK_ERROR(cudaFree(SuperBlocks));
+        },
+        TheSlabAllocContext.SuperBlocks);
   }
 
   ~SlabAlloc() { CleanupCommands.ExecuteTasks(); };
