@@ -409,7 +409,7 @@ public:
   static constexpr uint32_t WordsPerMemoryUnit = WordsPerMemUnit;
   static constexpr uint32_t MemoryBlocksPerSuperBlock = (1 << MemoryBlocksLogN);
 
-  using MemoryUnit = uint32_t[WarpSize][WordsPerMemoryUnit];
+  using MemoryUnit = uint32_t[WordsPerMemoryUnit][WarpSize];
   using MemoryBlock = MemoryUnit[MemoryUnitsPerMemoryBlock];
   using MemoryBlockBitMap = uint32_t[WarpSize];
   using BitMap = MemoryBlockBitMap[MemoryBlocksPerSuperBlock];
