@@ -477,24 +477,29 @@ public:
     return (Address & MemoryBlockIndexMask) >> MemoryBlockIndexOffset;
   }
 
-  __device__ __host__ __forceinline__ SlabAllocAddressT
-  getMemBlockAddress(SlabAllocAddressT Address) const {}
-
   __device__ __host__ __forceinline__ uint32_t
   getMemUnitIndex(SlabAllocAddressT Address) const {
     return Address & MemoryUnitIndexMask;
   }
 
   __device__ __forceinline__ uint32_t *
-  getPointerFromSlab(const SlabAllocAddressT &Next, const uint32_t &LaneID) {
-    /* not implemented */
-    return nullptr;
+  getPointerFromSlab(const SlabAllocAddressT &Addr, const uint32_t &LaneID) {
+    uint32_t SuperBlockIndex = getSuperBlockIndex(Addr);
+    uint32_t MemoryBlockIndex = getMemBlockIndex(Addr);
+    uint32_t MemoryUnitIndex = getMemUnitIndex(Addr);
+
+    SuperBlock *TheSuperBlock =
+        reintepret_cast<SuperBlock *>(SuperBlocks[SuperBlockIndex]);
+    return reintepret_cast<uint32_t *>(
+               &TheSuperBlock
+                    ->TheMemoryBlocks[MemoryBlockIndex][MemoryUnitIndex]) +
+           LaneID;
   }
 
   __device__ __forceinline__ uint32_t *
   getPointerForBitmap(const uint32_t SuperBlockIndex,
                       const uint32_t BitMapIndex) {
-    /* not implemented */
+    /* TODO: Implemenent. Very Low Priority */
     return nullptr;
   }
 
