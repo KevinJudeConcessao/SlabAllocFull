@@ -468,20 +468,20 @@ private:
 
 public:
   __device__ __host__ __forceinline__ uint32_t
-  GetSuperBlockIndex(SlabAllocAddressT Address) const {
+  getSuperBlockIndex(SlabAllocAddressT Address) const {
     return Address >> SuperBlockIndexOffset;
   }
 
   __device__ __host__ __forceinline__ uint32_t
-  GetMemBlockIndex(SlabAllocAddressT Address) const {
+  getMemBlockIndex(SlabAllocAddressT Address) const {
     return (Address & MemoryBlockIndexMask) >> MemoryBlockIndexOffset;
   }
 
   __device__ __host__ __forceinline__ SlabAllocAddressT
-  GetMemBlockAddress(SlabAllocAddressT Address) const {}
+  getMemBlockAddress(SlabAllocAddressT Address) const {}
 
   __device__ __host__ __forceinline__ uint32_t
-  GetMemUnitIndex(SlabAllocAddressT Address) const {
+  getMemUnitIndex(SlabAllocAddressT Address) const {
     return Address & MemoryUnitIndexMask;
   }
 
@@ -576,9 +576,9 @@ public:
                                                        const uint32_t N) {}
 
   __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {
-    uint32_t SuperBlockIndex = GetSuperBlockIndex(Ptr);
-    uint32_t MemoryBlockIndex = GetMemBlockIndex(Ptr);
-    uint32_t MemoryUnitIndex = GetMemUnitIndex(Ptr);
+    uint32_t SuperBlockIndex = getSuperBlockIndex(Ptr);
+    uint32_t MemoryBlockIndex = getMemBlockIndex(Ptr);
+    uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
 
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
     BitMap &BitMapRef = SBPtr->TheBitMap;
@@ -593,8 +593,8 @@ public:
            "Memory Block Index: %d, "
            "Memory Unit Index: %d"
            "\n",
-           GetSuperBlockIndex(Addr), GetMemBlockIndex(Addr),
-           GetMemUnitIndex(Addr));
+           getSuperBlockIndex(Addr), getMemBlockIndex(Addr),
+           getMemUnitIndex(Addr));
   }
 
   __device__ __forceinline__ void debug() {
