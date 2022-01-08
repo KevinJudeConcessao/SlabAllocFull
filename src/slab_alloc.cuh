@@ -459,14 +459,12 @@ private:
    * └─────────────────┴──────────────────┴─────────────────┘
    */
 
-  /* TODO: Masks are incorrect. To correct them */
+  static constexpr uint32_t MemoryUnitIndexMask = 0x000003FFu;
+  static constexpr uint32_t MemoryBlockIndexMask = 0x00FFFC00u;
+  static constexpr uint32_t SuperBlockIndexMask = 0xFF000000u;
 
-  static constexpr uint32_t MemoryUnitIndexMask = 0x000000FFu;
-  static constexpr uint32_t MemoryBlockIndexMask = 0x001FFF00u;
-  static constexpr uint32_t SuperBlockIndexMask = 0xFFE00000u;
-
-  static constexpr uint32_t MemoryBlockIndexOffset = 9;
-  static constexpr uint32_t SuperBlockIndexOffset = 23;
+  static constexpr uint32_t MemoryBlockIndexOffset = 10;
+  static constexpr uint32_t SuperBlockIndexOffset = 24;
 
 public:
   __device__ __host__ __forceinline__ uint32_t
