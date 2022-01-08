@@ -72,7 +72,7 @@ public:
     return *this;
   }
 
-  __device__ __host__ ~SlabAllocLightContext() {};
+  __device__ __host__ ~SlabAllocLightContext(){};
 
   __device__ __host__ void initParameters(uint32_t *d_super_block,
                                           uint32_t hash_coef) {
@@ -416,33 +416,35 @@ public:
 
   using MemoryUnit = uint32_t[WarpSize][WordsPerMemoryUnit];
   using MemoryBlock = MemoryUnit[MemoryUnitsPerMemoryBlock];
+  using MemoryBlocks = MemoryBlock[MemoryBlocksPerSuperBlock];
+
   using MemoryBlockBitMap = uint32_t[WarpSize];
   using BitMap = MemoryBlockBitMap[MemoryBlocksPerSuperBlock];
-  using MemoryBlocks = MemoryBlock[MemoryBlocksPerSuperBlock];
 
   struct SuperBlock {
     BitMap TheBitMap;
     MemoryBlocks TheMemoryBlocks;
   };
 
-  __device__ __host__ SlabAllocContext() {};
+  __device__ __host__ SlabAllocContext()
+      : HashCoefficient{0} NumberOfAttempts{0}, ResidentIndex{0},
+        ResidentBitMap{0}, SuperBlockIndex{0}, SuperBlockAllocationOffset{0} {}
 
   __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
       : HashCoefficient(SAC.HashCoefficient), NumberOfAttempts{0},
-        ResidentIndex{0}, ResidentBitMap{0}, SuperBlockIndex{0} {}
+        ResidentIndex{0}, ResidentBitMap{0}, SuperBlockIndex{0},
+        SuperBlockAllocationOffset{SAC.SuperBlockAllocationOffset} {}
 
   SlabAllocContext &operator=(const SlabAllocContext &SAC) {
     HashCoefficient = SAC.HashCoefficient;
     NumberOfAttempts = 0;
     ResidentIndex = 0;
     SuperBlockIndex = 0;
-
-    std::copy(SAC.SuperBlocks, SAC.SuperBlocks + SuperBlocksN, SuperBlocks);
-
+    SuperBlockAllocationOffset = SAC.SuperBlockAllocationOffset;
     return *this;
   }
 
-  __device__ __host__ ~SlabAllocContext() {};
+  __device__ __host__ ~SlabAllocContext() {}
 
 private:
   /* Some Helper Functions */
