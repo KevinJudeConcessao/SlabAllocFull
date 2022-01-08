@@ -23,6 +23,8 @@
 #include <iostream>
 #include <random>
 
+#define MAX_SUPERBLOCK_ALLOCATIONS 4096
+
 /*
  * This class does not own any memory, and will be shallowly copied into device
  * kernel
@@ -395,6 +397,9 @@ public:
   }
 };
 
+__constant__ uint32_t *SuperBlocks[MAX_SUPERBLOCK_ALLOCATIONS];
+static uint32_t NextAllocationOffset = 0;
+
 template <uint32_t, uint32_t, uint32_t> class SlabAlloc;
 
 template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN,
@@ -608,11 +613,10 @@ private:
   uint32_t ResidentIndex;
   uint32_t ResidentBitMap;
   uint32_t SuperBlockIndex;
-
-  SuperBlock *SuperBlocks[SuperBlocksN];
+  uint32_t SuperBlockAllocationOffset;
 };
 
-template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN, 
+template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN,
           uint32_t WordsPerMemoryUnit = 1>
 class SlabAlloc {
 public:
@@ -621,14 +625,21 @@ public:
   using SuperBlockTy = typename AllocContext::SuperBlock;
 
   SlabAlloc() : CleanupCommands{}, TheSlabAllocContext{} {
-    std::mt19937 RandomNumberGenerator{static_cast<unsigned long>(std::time(0))};
+    std::mt19937 RandomNumberGenerator{
+        static_cast<unsigned long>(std::time(0))};
     uint32_t HashCoefficient = RandomNumberGenerator();
     Executor<true> BlockSetup;
 
+    assert(
+        ((MAX_SUPERBLOCK_ALLOCATIONS - NextAllocationOffset) >= SuperBlocksN) &&
+        "Cannot allocate requested number of superblocks");
+
+    uint32_t SuperBlockAllocationOffset = NextAllocationOffset;
+    NextAllocationOffset += SuperBlocksN;
+
     for (int Counter = 0; Counter < SuperBlocksN; ++Counter) {
-      CHECK_ERROR(cudaMalloc(
-          reinterpret_cast<void **>(&TheSlabAllocContext.SuperBlocks[Counter]),
-          sizeof(SuperBlockTy)));
+      CHECK_ERROR(cudaMalloc(reinterpret_cast<void **>(&SuperBlocks[Counter]),
+                             sizeof(SuperBlockTy)));
 
       BlockSetup.AddTask(
           [](SuperBlockTy *TheSuperBlock) -> void {
@@ -638,17 +649,22 @@ public:
                 cudaMemset(TheSuperBlock->TheMemoryBlocks, 0xFF,
                            sizeof(typename AllocContext::MemoryBlocks)));
           },
-          TheSlabAllocContext.SuperBlocks[Counter]);
+          TheSuperBlocks[Counter]);
 
       CleanupCommands.AddTask(
           [](SuperBlockTy *TheSuperBlock) -> void {
             CHECK_ERROR(cudaFree(TheSuperBlock));
           },
-          TheSlabAllocContext.SuperBlocks[Counter]);
+          TheSuperBlocks[Counter]);
     }
 
     BlockSetup.ExecuteTasks();
     TheSlabAllocContext.HashCoefficient = HashCoefficient;
+    TheSlabAllocContext.SuperBlockAllocationOffset = SuperBlockAllocationOffset;
+    cudaMemcpyToSymbol(SuperBlocks, TheSuperBlocks,
+                       sizeof(SuperBlockTy *) * SuperBlocksN,
+                       sizeof(SuperBlockTy *) * SuperBlockAllocationOffset,
+                       cudaMemcpyHostToDevice);
   }
 
   ~SlabAlloc() { CleanupCommands.ExecuteTasks(); };
@@ -658,6 +674,7 @@ public:
 private:
   Executor<false> CleanupCommands;
   AllocContext TheSlabAllocContext;
+  SuperBlockTy *TheSuperBlocks[SuperBlocksN];
 };
 
 template <uint32_t LogNumMemoryBlocks, uint32_t NumSuperBlocks,
