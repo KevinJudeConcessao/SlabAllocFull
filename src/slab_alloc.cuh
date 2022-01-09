@@ -579,8 +579,8 @@ public:
              *   We shall call such groups of memory units as memory unit
              *   chunks.
              * - The first five bits (2^5 = 32, warp size) used to identify
-             *   memory unit chunk. The next five bits are identify the previously
-             *   unallocated memory unit within the memory unit chunk.
+             *   memory unit chunk. The next five bits are identify the
+             *   previously unallocated memory unit within the memory unit chunk.
              */
             uint32_t MemoryUnitIndex = (LaneID << 5) | EmptyLane;
 
@@ -614,7 +614,7 @@ public:
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
     MemoryBlockBitMap &MBBMRef = SBPtr->TheBitMap[MemoryBlockIndex];
 
-    atomicAnd(&MBBMRef[MemoryUnitIndex], ~(1 << MemoryUnitIndex));
+    atomicAnd(&MBBMRef[MemoryUnitIndex >> 5], ~((1 << MemoryUnitIndex) & 0x1F));
   }
 
   __device__ __host__ __forceinline__ void
