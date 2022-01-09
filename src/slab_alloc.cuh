@@ -499,8 +499,12 @@ public:
   __device__ __forceinline__ uint32_t *
   getPointerForBitmap(const uint32_t SuperBlockIndex,
                       const uint32_t BitMapIndex) {
-    /* TODO: Implement. Very Low Priority */
-    return nullptr;
+    uint32_t SuperBlockIndex = getSuperBlockIndex(Ptr);
+    uint32_t MemoryBlockIndex = getMemBlockIndex(Ptr);
+    uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
+
+    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    return reintepret_cast<uint32_t *>(&SBPtr->TheBitMap[BitMapIndex]);
   }
 
   __device__ __forceinline__ void createMemBlockIndex(uint32_t GlobalWarpID) {
@@ -588,7 +592,7 @@ public:
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
     MemoryBlockBitMap &MBBMRef = SBPtr->TheBitMap[MemoryBlockIndex];
 
-    atomicAnd(&MBBMRef[MemoryUnitIndex], ~(1 << MemoryUnitIndex));    
+    atomicAnd(&MBBMRef[MemoryUnitIndex], ~(1 << MemoryUnitIndex));
   }
 
   __device__ __host__ __forceinline__ void
