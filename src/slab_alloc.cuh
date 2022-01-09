@@ -582,7 +582,12 @@ public:
   }
 
   __device__ __forceinline__ uint32_t warpAllocateBulk(const uint32_t &LaneID,
-                                                       const uint32_t N) {}
+                                                       const uint32_t N) {
+    /*
+     * TODO: Implement warpAllocateBulk
+     * PRIORITY: Low
+     */                                                     
+  }
 
   __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {
     uint32_t SuperBlockIndex = getSuperBlockIndex(Ptr);
