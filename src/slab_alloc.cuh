@@ -499,7 +499,7 @@ public:
   __device__ __forceinline__ uint32_t *
   getPointerForBitmap(const uint32_t SuperBlockIndex,
                       const uint32_t BitMapIndex) {
-    /* TODO: Implemenent. Very Low Priority */
+    /* TODO: Implement. Very Low Priority */
     return nullptr;
   }
 
@@ -586,10 +586,9 @@ public:
     uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
 
     SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
-    BitMap &BitMapRef = SBPtr->TheBitMap;
-    MemoryBlockBitMap &MBBMRef = BitMapRef[MemoryBlockIndex];
+    MemoryBlockBitMap &MBBMRef = SBPtr->TheBitMap[MemoryBlockIndex];
 
-    atomicAnd(&MBBMRef[MemoryUnitIndex], ~((1 << MemoryUnitIndex) & 0x1F));
+    atomicAnd(&MBBMRef[MemoryUnitIndex], ~(1 << MemoryUnitIndex));    
   }
 
   __device__ __host__ __forceinline__ void
