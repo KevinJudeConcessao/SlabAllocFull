@@ -428,19 +428,19 @@ public:
 
   __device__ __host__ SlabAllocContext()
       : HashCoefficient{0} NumberOfAttempts{0}, ResidentIndex{0},
-        ResidentBitMap{0}, SuperBlockIndex{0}, SuperBlockAllocationOffset{0} {}
+        ResidentBitMap{0}, SuperBlockIndex{0}, SBAllocOffset{0} {}
 
   __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
       : HashCoefficient(SAC.HashCoefficient), NumberOfAttempts{0},
         ResidentIndex{0}, ResidentBitMap{0}, SuperBlockIndex{0},
-        SuperBlockAllocationOffset{SAC.SuperBlockAllocationOffset} {}
+        SBAllocOffset{SAC.SBAllocOffset} {}
 
   SlabAllocContext &operator=(const SlabAllocContext &SAC) {
     HashCoefficient = SAC.HashCoefficient;
     NumberOfAttempts = 0;
     ResidentIndex = 0;
     SuperBlockIndex = 0;
-    SuperBlockAllocationOffset = SAC.SuperBlockAllocationOffset;
+    SBAllocOffset = SAC.SBAllocOffset;
     return *this;
   }
 
@@ -488,8 +488,8 @@ public:
     uint32_t MemoryBlockIndex = getMemBlockIndex(Addr);
     uint32_t MemoryUnitIndex = getMemUnitIndex(Addr);
 
-    SuperBlock *TheSuperBlock =
-        reintepret_cast<SuperBlock *>(SuperBlocks[SuperBlockIndex]);
+    SuperBlock *TheSuperBlock = reintepret_cast<SuperBlock *>(
+        SuperBlocks[SBAllocOffset + SuperBlockIndex]);
     return reintepret_cast<uint32_t *>(
                &TheSuperBlock
                     ->TheMemoryBlocks[MemoryBlockIndex][MemoryUnitIndex]) +
@@ -503,7 +503,7 @@ public:
     uint32_t MemoryBlockIndex = getMemBlockIndex(Ptr);
     uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
 
-    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
     return reintepret_cast<uint32_t *>(&SBPtr->TheBitMap[BitMapIndex]);
   }
 
@@ -523,7 +523,7 @@ public:
     ResidentIndex = (HashCoefficient * (NumberOfAttempts + GlobalWarpID)) >>
                     (32 - MemoryBlocksLogN);
 
-    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
     MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
     ResidentBitMap = MBBRef[LaneID];
   }
@@ -533,7 +533,7 @@ public:
     uint32_t GlobalWarpID = (ThreadID >> 5);
     createMemBlockIndex(GlobalWarpID);
 
-    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
     MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
     ResidentBitMap = MBBRef[LaneID];
   }
@@ -559,7 +559,7 @@ public:
       } else {
         uint32_t SourceLane = __ffs(FreeLane) - 1;
         if (SourceLane == LaneID) {
-          SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+          SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
           MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
 
           ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap,
@@ -580,7 +580,8 @@ public:
              *   chunks.
              * - The first five bits (2^5 = 32, warp size) used to identify
              *   memory unit chunk. The next five bits are identify the
-             *   previously unallocated memory unit within the memory unit chunk.
+             *   previously unallocated memory unit within the memory unit
+             *   chunk.
              */
             uint32_t MemoryUnitIndex = (LaneID << 5) | EmptyLane;
 
@@ -611,7 +612,7 @@ public:
     uint32_t MemoryBlockIndex = getMemBlockIndex(Ptr);
     uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
 
-    SuperBlock *SBPtr = SuperBlocks[SuperBlockIndex];
+    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
     MemoryBlockBitMap &MBBMRef = SBPtr->TheBitMap[MemoryBlockIndex];
 
     atomicAnd(&MBBMRef[MemoryUnitIndex >> 5], ~((1 << MemoryUnitIndex) & 0x1F));
@@ -645,7 +646,7 @@ private:
   uint32_t ResidentIndex;
   uint32_t ResidentBitMap;
   uint32_t SuperBlockIndex;
-  uint32_t SuperBlockAllocationOffset;
+  uint32_t SBAllocOffset;
 };
 
 template <uint32_t MemoryBlocksLogN, uint32_t SuperBlocksN,
@@ -666,7 +667,7 @@ public:
         ((MAX_SUPERBLOCK_ALLOCATIONS - NextAllocationOffset) >= SuperBlocksN) &&
         "Cannot allocate requested number of superblocks");
 
-    uint32_t SuperBlockAllocationOffset = NextAllocationOffset;
+    uint32_t SBAllocOffset = NextAllocationOffset;
     NextAllocationOffset += SuperBlocksN;
 
     for (int Counter = 0; Counter < SuperBlocksN; ++Counter) {
@@ -692,11 +693,10 @@ public:
 
     BlockSetup.ExecuteTasks();
     TheSlabAllocContext.HashCoefficient = HashCoefficient;
-    TheSlabAllocContext.SuperBlockAllocationOffset = SuperBlockAllocationOffset;
-    cudaMemcpyToSymbol(SuperBlocks, TheSuperBlocks,
-                       sizeof(SuperBlockTy *) * SuperBlocksN,
-                       sizeof(SuperBlockTy *) * SuperBlockAllocationOffset,
-                       cudaMemcpyHostToDevice);
+    TheSlabAllocContext.SBAllocOffset = SBAllocOffset;
+    cudaMemcpyToSymbol(
+        SuperBlocks, TheSuperBlocks, sizeof(SuperBlockTy *) * SuperBlocksN,
+        sizeof(SuperBlockTy *) * SBAllocOffset, cudaMemcpyHostToDevice);
   }
 
   ~SlabAlloc() { CleanupCommands.ExecuteTasks(); };
