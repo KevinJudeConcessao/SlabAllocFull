@@ -566,10 +566,27 @@ public:
                                  ResidentBitMap | (1 << EmptyLane));
           if (ReadBitMap == ResidentBitMap) {
             ResidentBitMap = ResidentBitMap | (1 << EmptyLane);
+
+            /*
+             * RATIONALE:
+             * - There are 1024 memory units in one memory block.
+             * - There are 1024 bits in the MemoryBlockBitMap (typedef for
+             *   uint32_t[WarpSize])
+             * - Each thread in a warp with LaneID LI is responsible for
+             *   MemoryBlockBitMap[LI]
+             * - The first thread is responsible for memory units 0-31; the
+             *   second thread is responsible for memory units 32-63, and so on.
+             *   We shall call such groups of memory units as memory unit
+             *   chunks.
+             * - The first five bits (2^5 = 32, warp size) used to identify
+             *   memory unit chunk. The next five bits are identify the previously
+             *   unallocated memory unit within the memory unit chunk.
+             */
+            uint32_t MemoryUnitIndex = (LaneID << 5) | EmptyLane;
+
             AllocatedResult = (SuperBlockIndex << SuperBlockIndexOffset) |
                               (ResidentIndex << MemoryBlockIndexOffset) |
-                              (LaneID /* TODO: Need clarification */) |
-                              EmptyLane;
+                              MemoryUnitIndex;
           } else {
             ResidentBitMap = ReadBitMap;
           }
@@ -586,7 +603,7 @@ public:
     /*
      * TODO: Implement warpAllocateBulk
      * PRIORITY: Low
-     */                                                     
+     */
   }
 
   __device__ __forceinline__ void freeUntouched(SlabAllocAddressT Ptr) {
@@ -611,8 +628,10 @@ public:
   }
 
   __device__ __forceinline__ void debug() {
-    printf("[SlabAllocContext] Thread: %d, Hash Coefficient: %u, Number of "
-           "Attempts: %u, Resident Index: %u, Resident BitMap: %x, SuperBlock "
+    printf("[SlabAllocContext] Thread: %d, Hash Coefficient: %u, "
+           "Number of "
+           "Attempts: %u, Resident Index: %u, Resident BitMap: %x, "
+           "SuperBlock "
            "Index: %u\n",
            threadIdx.x, HashCoefficient, NumberOfAttempts, ResidentIndex,
            ResidentBitMap, SuperBlockIndex);
