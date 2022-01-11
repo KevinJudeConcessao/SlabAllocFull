@@ -17,6 +17,7 @@
 #pragma once
 #include "slab_alloc_global.cuh"
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <ctime>
 #include <functional>
@@ -427,7 +428,7 @@ public:
   };
 
   __device__ __host__ SlabAllocContext()
-      : HashCoefficient{0} NumberOfAttempts{0}, ResidentIndex{0},
+      : HashCoefficient{0}, NumberOfAttempts{0}, ResidentIndex{0},
         ResidentBitMap{0}, SuperBlockIndex{0}, SBAllocOffset{0} {}
 
   __device__ __host__ SlabAllocContext(const SlabAllocContext &SAC)
@@ -488,9 +489,9 @@ public:
     uint32_t MemoryBlockIndex = getMemBlockIndex(Addr);
     uint32_t MemoryUnitIndex = getMemUnitIndex(Addr);
 
-    SuperBlock *TheSuperBlock = reintepret_cast<SuperBlock *>(
+    SuperBlock *TheSuperBlock = reinterpret_cast<SuperBlock *>(
         SuperBlocks[SBAllocOffset + SuperBlockIndex]);
-    return reintepret_cast<uint32_t *>(
+    return reinterpret_cast<uint32_t *>(
                &TheSuperBlock
                     ->TheMemoryBlocks[MemoryBlockIndex][MemoryUnitIndex]) +
            LaneID;
@@ -499,12 +500,8 @@ public:
   __device__ __forceinline__ uint32_t *
   getPointerForBitmap(const uint32_t SuperBlockIndex,
                       const uint32_t BitMapIndex) {
-    uint32_t SuperBlockIndex = getSuperBlockIndex(Ptr);
-    uint32_t MemoryBlockIndex = getMemBlockIndex(Ptr);
-    uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
-
     SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
-    return reintepret_cast<uint32_t *>(&SBPtr->TheBitMap[BitMapIndex]);
+    return reinterpret_cast<uint32_t *>(&SBPtr->TheBitMap[BitMapIndex]);
   }
 
   __device__ __forceinline__ void createMemBlockIndex(uint32_t GlobalWarpID) {
