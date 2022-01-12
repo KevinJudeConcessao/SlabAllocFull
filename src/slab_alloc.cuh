@@ -729,5 +729,5 @@ struct FullAllocatorPolicy {
   using DynamicAllocatorT =
       SlabAlloc<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
   using AllocatorContextT =
-      SlabAllocLight<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
+      SlabAllocContext<LogNumMemoryBlocks, NumSuperBlocks, NumReplicas>;
 };
