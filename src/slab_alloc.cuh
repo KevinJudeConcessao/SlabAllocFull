@@ -500,7 +500,8 @@ public:
   __device__ __forceinline__ uint32_t *
   getPointerForBitmap(const uint32_t SuperBlockIndex,
                       const uint32_t BitMapIndex) {
-    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
+    SuperBlock *SBPtr = reinterpret_cast<SuperBlock *>(
+        SuperBlocks[SBAllocOffset + SuperBlockIndex]);
     return reinterpret_cast<uint32_t *>(&SBPtr->TheBitMap[BitMapIndex]);
   }
 
@@ -520,7 +521,8 @@ public:
     ResidentIndex = (HashCoefficient * (NumberOfAttempts + GlobalWarpID)) >>
                     (32 - MemoryBlocksLogN);
 
-    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
+    SuperBlock *SBPtr = reinterpret_cast<SuperBlock *>(
+        SuperBlocks[SBAllocOffset + SuperBlockIndex]);
     MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
     ResidentBitMap = MBBRef[LaneID];
   }
@@ -530,7 +532,8 @@ public:
     uint32_t GlobalWarpID = (ThreadID >> 5);
     createMemBlockIndex(GlobalWarpID);
 
-    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
+    SuperBlock *SBPtr = reinterpret_cast<SuperBlock *>(
+        SuperBlocks[SBAllocOffset + SuperBlockIndex]);
     MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
     ResidentBitMap = MBBRef[LaneID];
   }
@@ -556,7 +559,8 @@ public:
       } else {
         uint32_t SourceLane = __ffs(FreeLane) - 1;
         if (SourceLane == LaneID) {
-          SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
+          SuperBlock *SBPtr = reinterpret_cast<SuperBlock *>(
+              SuperBlocks[SBAllocOffset + SuperBlockIndex]);
           MemoryBlockBitMap &MBBRef = SBPtr->TheBitMap[ResidentIndex];
 
           ReadBitMap = atomicCAS(&MBBRef[LaneID], ResidentBitMap,
@@ -609,7 +613,8 @@ public:
     uint32_t MemoryBlockIndex = getMemBlockIndex(Ptr);
     uint32_t MemoryUnitIndex = getMemUnitIndex(Ptr);
 
-    SuperBlock *SBPtr = SuperBlocks[SBAllocOffset + SuperBlockIndex];
+    SuperBlock *SBPtr = reinterpret_cast<SuperBlock *>(
+        SuperBlocks[SBAllocOffset + SuperBlockIndex]);
     MemoryBlockBitMap &MBBMRef = SBPtr->TheBitMap[MemoryBlockIndex];
 
     atomicAnd(&MBBMRef[MemoryUnitIndex >> 5], ~((1 << MemoryUnitIndex) & 0x1F));
