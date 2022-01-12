@@ -673,7 +673,7 @@ public:
     NextAllocationOffset += SuperBlocksN;
 
     for (int Counter = 0; Counter < SuperBlocksN; ++Counter) {
-      CHECK_ERROR(cudaMalloc(reinterpret_cast<void **>(&SuperBlocks[Counter]),
+      CHECK_ERROR(cudaMalloc(reinterpret_cast<void **>(&TheSuperBlocks[Counter]),
                              sizeof(SuperBlockTy)));
 
       BlockSetup.AddTask(
@@ -682,7 +682,7 @@ public:
                                    sizeof(typename AllocContext::BitMap)));
             CHECK_ERROR(
                 cudaMemset(TheSuperBlock->TheMemoryBlocks, 0xFF,
-                           sizeof(typename AllocContext::MemoryBlocks)));
+                          sizeof(typename AllocContext::MemoryBlocks)));
           },
           TheSuperBlocks[Counter]);
 
